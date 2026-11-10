@@ -2,23 +2,31 @@
 
 ## Shared engine
 
-The crate exposes a pure Rust DCF function. The Axum binary and optional PyO3 extension both call that function. This prevents valuation drift between HTTP and Python clients.
+The crate exposes a pure Rust FCFF DCF function. The Axum HTTP API and optional PyO3 extension both call that function, preventing calculation drift between interfaces.
 
 ## Data path
 
-The ingestion sidecar creates a complete Parquet snapshot and a manifest. The API loads and validates both at process startup; request handlers perform no network I/O. The first store implementation materializes validated rows in memory rather than claiming a zero-copy memory map.
+The ingestion sidecar writes a Parquet snapshot and a JSON manifest. The API validates both at startup and loads rows into an immutable in-memory store. The manifest accepts structured dropped-ticker records emitted by the ingestion adapter. Duplicate tickers, invalid numbers, non-positive share counts and prices are rejected.
 
-## v1 boundaries
+The API supports an authenticated atomic reload of a new local snapshot. It validates the replacement off the async executor and swaps the active store only after validation succeeds. A failed reload leaves the active snapshot untouched.
 
-- No live prices, authentication, hot reload, sector-specific debt spreads, Monte Carlo or comps.
-- The API binds to loopback by default. Add a reverse proxy and network boundary before deployment.
-- Ingestion defaults are examples only. Configure country-specific assumptions and independently validate source statement mappings.
+## Runtime contract
+
+- `HOST` defaults to `0.0.0.0`; `PORT` defaults to `8080`; `DATA_PATH` defaults to `/data/fundamentals.parquet`.
+- `API_ADMIN_TOKEN` enables `POST /admin/reload`; it must be at least 32 characters.
+- `GET /health` is liveness, `GET /ready` is readiness, and `GET /meta` reports snapshot freshness and row counts.
+- The Docker image runs as a non-root user and expects a read-only data mount.
+
+## Data and deployment boundaries
+
+- The current yfinance adapter is experimental. It does not establish redistribution rights, reliable statement normalization, or country-specific assumptions.
+- The API does not fetch external data on request. The updater must publish a complete, validated snapshot before triggering reload.
+- This repository has a linked Vercel project, but the project currently has no detected framework and is not yet verified as a running Rust API. The Docker image is portable to a container host; production hosting and ingress are separate deployment work.
+- Public deployment requires HTTPS, rate limiting, private administration, monitoring and a licensed market-data source.
 
 ## Continuous performance gate
 
-GitHub Actions runs the same quality and performance gate on every pull request, every push to `main`, and daily at 02:17 UTC (07:47 Asia/Kolkata). It builds the release binary, runs Rust tests and Clippy, builds and tests the Python wheel, then launches the actual Axum server against a deterministic 1,000-company Parquet snapshot.
-
-The current CI budgets are:
+GitHub Actions runs quality and performance gates on pull requests, pushes to `main`, and daily at 02:17 UTC. It builds the release binary, runs Rust tests and Clippy, builds and tests the Python wheel, then benchmarks the actual Axum server against a deterministic 1,000-company Parquet snapshot.
 
 | Measurement | Gate |
 |---|---:|
@@ -28,12 +36,8 @@ The current CI budgets are:
 | API process peak RSS | ≤ 250 MiB |
 | Release binary | < 15 MiB |
 
-Latency includes loopback HTTP and response serialization. Peak RSS is measured for the API process, including a kernel-reported child-process high-water mark. The benchmark report is retained as a workflow artifact for 30 days.
-
-These are repeatable GitHub-runner regression gates, not a production SLA or proof of performance on every host, network, dataset, or deployment region. A failing, missing, or out-of-scope check blocks automated merging.
+These are repeatable GitHub-runner regression gates, not a production SLA. They do not measure external network latency or a deployed hosting environment.
 
 ## Release policy
 
-Only in-scope changes to the Rust engine, Python SDK, ingestion layer, or package manifests are considered meaningful releases. Both Cargo and Python package versions must be bumped to the same higher stable SemVer version. Documentation-only, test-only, and housekeeping changes remain open for maintainer handling and do not trigger PyPI publication.
-
-Eligible pull requests require an approval from the repository maintainer on the exact head commit, passing CI/performance gates, and a successful Vercel preview. After merge, the release workflow waits for the main-branch CI gate and Vercel production deployment to succeed before creating the version tag and dispatching the tag-validated PyPI workflow. Any failed, missing, or out-of-scope condition withholds the release.
+Only in-scope changes to the Rust engine, Python SDK, ingestion layer, or package manifests are considered meaningful releases. Cargo and Python package versions must match and increase together. Eligible pull requests require maintainer authorization, automated diff review, passing CI/performance gates and a successful Vercel preview. After merge, the release workflow waits for main CI and Vercel production status before tagging and publishing to PyPI.

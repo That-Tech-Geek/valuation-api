@@ -27,6 +27,9 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - name: Test the trusted review scanner
+        run: python scripts/test_automated_review.py
+
       - name: Fetch pull request diff without checking out PR code
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

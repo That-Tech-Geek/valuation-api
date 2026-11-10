@@ -1,11 +1,11 @@
-# valuation-api
+# valuation
 
 A Rust FCFF discounted-cash-flow engine distributed as both an HTTP API and a Python package. Both interfaces call the same Rust implementation.
 
 ## Install the Python library
 
 ```bash
-pip install valuation-api
+pip install valuation
 ```
 
 ```python
@@ -19,6 +19,8 @@ result = compute_dcf(
 )
 print(result["fair_value_per_share"])
 ```
+
+The install/distribution name is `valuation`; the Python import namespace remains `valuation_api`.
 
 ## Run the HTTP API
 
@@ -65,10 +67,10 @@ pytest -q
 
 Releases are tag-driven. The `Publish to PyPI` GitHub Actions workflow builds platform wheels and publishes them with PyPI Trusted Publishing (OIDC); no long-lived PyPI API token is stored in GitHub.
 
-**Package-name blocker:** `valuation-api` is already registered on PyPI by an existing project. Configure this workflow against that project only if you control its PyPI owner account. Otherwise, choose a distinct project name and update `project.name` in `pyproject.toml` plus the PyPI environment URL below before creating a release tag. The Python import remains `valuation_api` unless you intentionally change the module API.
+**PyPI name check required:** the intended distribution name is `valuation`. Its availability has not been conclusively verified, so do not create a release tag until the project URL is checked and the name is confirmed available. PyPI project names are globally unique.
 
 1. Create the `pypi` environment in the GitHub repository settings.
-2. On PyPI, add a **pending trusted publisher** for owner `That-Tech-Geek`, repository `valuation-api`, workflow filename `publish-pypi.yml`, and environment `pypi`. The project name on PyPI must be `valuation-api`.
+2. On PyPI, add a **pending trusted publisher** for owner `That-Tech-Geek`, repository `valuation-api`, workflow filename `publish-pypi.yml`, and environment `pypi`. The project name must be `valuation`.
 3. Ensure the version in `pyproject.toml` and `Cargo.toml` is the release version.
 4. After CI is green and the changes are merged to the release branch, create and push a matching tag, for example:
 

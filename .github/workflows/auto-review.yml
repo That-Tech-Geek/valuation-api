@@ -1,0 +1,59 @@
+name: Automated PR review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# This workflow runs trusted code from main and reads the PR diff through the API.
+# It never checks out or executes code from the pull request.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: automated-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Automated PR review
+    if: github.event.pull_request.base.ref == 'main' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted base branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Fetch pull request diff without checking out PR code
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api -H "Accept: application/vnd.github.diff" \
+            "repos/$REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.diff"
+
+      - name: Run deterministic security and workflow review
+        id: scan
+        run: |
+          python scripts/automated_review.py \
+            --diff "$RUNNER_TEMP/pr.diff" \
+            --report "$RUNNER_TEMP/review.md" \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish review summary to pull request
+        if: always() && steps.scan.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr review "$PR_NUMBER" --comment --body-file "$RUNNER_TEMP/review.md"
+
+      - name: Block auto-merge on high-confidence findings
+        if: steps.scan.outputs.blocking == 'true'
+        run: |
+          echo "Automated review found blocking security or workflow hazards."
+          exit 1

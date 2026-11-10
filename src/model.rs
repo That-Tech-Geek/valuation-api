@@ -59,6 +59,7 @@ impl Flags {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DcfOutput {
     pub wacc: f64,
+    pub terminal_growth: f64,
     pub enterprise_value: f64,
     pub equity_value: f64,
     pub fair_value_per_share: f64,

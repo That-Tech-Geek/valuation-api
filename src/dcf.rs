@@ -40,7 +40,7 @@ pub fn compute(input: &DcfInputs) -> DcfOutput {
     if equity < 0.0 { flags.0 |= Flags::NEGATIVE_EQUITY; }
     let fvps = if input.shares > 0.0 { equity / input.shares } else { f64::NAN };
 
-    DcfOutput { wacc, enterprise_value: ev, equity_value: equity,
+    DcfOutput { wacc, terminal_growth, enterprise_value: ev, equity_value: equity,
         fair_value_per_share: fvps, flags }
 }
 
@@ -65,6 +65,7 @@ mod tests {
         let out = compute(&x);
         assert!(out.flags.contains(Flags::BETA_CLAMPED));
         assert!(out.flags.contains(Flags::TERMINAL_GT_WACC));
+        assert!(out.terminal_growth < out.wacc);
     }
     #[test]
     fn flags_negative_fcff() {

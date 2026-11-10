@@ -16,7 +16,7 @@ fn value(c: &valuation_api::Company) -> Valuation {
     let o = compute(&DcfInputs::from(c));
     let mos = if c.price.abs() > f64::EPSILON { o.fair_value_per_share / c.price - 1.0 } else { f64::NAN };
     Valuation { ticker:c.ticker.clone(), as_of_date:c.as_of_date, currency:c.currency.clone(), wacc:o.wacc,
-        terminal_growth:c.terminal_growth, enterprise_value:o.enterprise_value, equity_value:o.equity_value,
+        terminal_growth:o.terminal_growth, enterprise_value:o.enterprise_value, equity_value:o.equity_value,
         fair_value_per_share:o.fair_value_per_share, market_price:c.price, margin_of_safety:mos, flags:o.flags.names().into_iter().map(str::to_owned).collect() }
 }
 async fn health(State(s):State<AppState>) -> Json<serde_json::Value> {

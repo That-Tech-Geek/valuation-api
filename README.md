@@ -65,6 +65,8 @@ pytest -q
 
 Releases are tag-driven. The `Publish to PyPI` GitHub Actions workflow builds platform wheels and publishes them with PyPI Trusted Publishing (OIDC); no long-lived PyPI API token is stored in GitHub.
 
+**Package-name blocker:** `valuation-api` is already registered on PyPI by an existing project. Configure this workflow against that project only if you control its PyPI owner account. Otherwise, choose a distinct project name and update `project.name` in `pyproject.toml` plus the PyPI environment URL below before creating a release tag. The Python import remains `valuation_api` unless you intentionally change the module API.
+
 1. Create the `pypi` environment in the GitHub repository settings.
 2. On PyPI, add a **pending trusted publisher** for owner `That-Tech-Geek`, repository `valuation-api`, workflow filename `publish-pypi.yml`, and environment `pypi`. The project name on PyPI must be `valuation-api`.
 3. Ensure the version in `pyproject.toml` and `Cargo.toml` is the release version.

@@ -7,6 +7,7 @@ import sys
 
 ALLOWED_EXACT = {
     "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md", ".gitignore",
+    "Dockerfile", ".dockerignore", "compose.yaml",
     "Cargo.toml", "Cargo.lock", "pyproject.toml",
     ".github/CODEOWNERS", ".github/dependabot.yml", ".github/pull_request_template.md",
     ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",

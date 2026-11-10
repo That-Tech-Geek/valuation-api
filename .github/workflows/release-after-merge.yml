@@ -23,18 +23,36 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify meaningful change and release version
+      - name: Verify release or explicitly requested PyPI retry
         id: eligibility
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [[ "$PR_BODY" == *"[pypi-republish]"* ]]; then
+            VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+            TAG="v$VERSION"
+            TAG_COMMIT="$(git rev-parse "refs/tags/$TAG^{commit}")"
+            git merge-base --is-ancestor "$TAG_COMMIT" "$COMMIT_SHA" || {
+              echo "Refusing PyPI retry: existing tag $TAG is not an ancestor of the merged main commit."
+              exit 1
+            }
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "republish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "Verified retry of existing immutable tag $TAG at $TAG_COMMIT"
+            exit 0
+          fi
+
           result="$(python scripts/release_eligibility.py "$PR_NUMBER" --merged)"
           echo "$result"
           release="$(python -c 'import json,sys; print(str(json.loads(sys.argv[1]).get("release", False)).lower())' "$result")"
           echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "republish=false" >> "$GITHUB_OUTPUT"
           if [ "$release" != "true" ]; then
             echo "Non-release change: merge is complete; PyPI publication is skipped."
             exit 0
@@ -50,7 +68,7 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 120); do
             result="$(gh api "repos/$REPOSITORY/commits/$COMMIT_SHA/check-runs" --jq '[.check_runs[] | select(.name == "Quality, scope and performance gates")] | sort_by(.started_at) | last | if . == null then "missing" elif .status != "completed" then "pending" else .conclusion end')"
             echo "Main CI benchmark gate: $result"
             if [ "$result" = "success" ]; then exit 0; fi
@@ -64,7 +82,7 @@ jobs:
           exit 1
 
       - name: Create immutable version tag
-        if: steps.eligibility.outputs.release == 'true'
+        if: steps.eligibility.outputs.release == 'true' && steps.eligibility.outputs.republish != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}

@@ -6,14 +6,13 @@ on:
   pull_request_review:
     types: [submitted]
 
-# This workflow uses trusted base-branch code only. It never checks out or runs PR code.
 permissions:
   contents: read
   pull-requests: write
   checks: read
 
 concurrency:
-  group: eligible-pr-${{ github.event.pull_request.number }}
+  group: eligible-pr-\${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -30,15 +29,12 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Install GitHub CLI
-        run: type -p gh
-
       - name: Check maintainer approval
         id: approval
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: \${{ github.event.pull_request.number }}
+          REPOSITORY: \${{ github.repository }}
         run: |
           set -euo pipefail
           state="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate --jq '[.[] | select(.user.login == "That-Tech-Geek")][-1].state // "NONE"')"
@@ -51,28 +47,31 @@ jobs:
           echo "approved=true" >> "$GITHUB_OUTPUT"
 
       - name: Enforce scope and meaningful versioned change
+        id: eligibility
         if: steps.approval.outputs.approved == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: \${{ github.repository }}
+          PR_NUMBER: \${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           if ! python scripts/release_eligibility.py "$PR_NUMBER"; then
             echo "PR held. It is out of scope, non-significant, or missing a coordinated version bump."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
 
       - name: Wait for all PR checks
-        if: steps.approval.outputs.approved == 'true'
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: \${{ github.event.pull_request.number }}
         run: gh pr checks "$PR_NUMBER" --watch --fail-fast
 
       - name: Enable squash auto-merge
-        if: steps.approval.outputs.approved == 'true'
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: \${{ github.event.pull_request.number }}
         run: gh pr merge "$PR_NUMBER" --auto --squash

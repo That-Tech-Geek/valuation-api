@@ -1,6 +1,6 @@
 # valuation
 
-A Rust FCFF discounted-cash-flow engine distributed as both an HTTP API and a Python package. Both interfaces call the same Rust implementation.
+A Rust FCFF discounted-cash-flow engine exposed through a Python package and an HTTP API. The Rust calculation kernel is shared by both interfaces.
 
 ## Install the Python library
 
@@ -20,21 +20,36 @@ result = compute_dcf(
 print(result["fair_value_per_share"])
 ```
 
-The install/distribution name is `valuation`; the Python import namespace remains `valuation_api`.
+The install/distribution name is `valuation`; the Python import namespace is `valuation_api`.
 
 ## Run the HTTP API
 
-Requires a valid Parquet snapshot and adjacent `fundamentals.manifest.json`.
+Requires a validated Parquet snapshot and adjacent `fundamentals.manifest.json`.
 
 ```bash
 cargo run --release -- --data data/fundamentals.parquet
 ```
 
-- `GET /health`
+The service listens on `0.0.0.0:8080` by default. Override with `HOST` and `PORT`, and set `DATA_PATH` when not using `--data`.
+
+- `GET /health`: liveness
+- `GET /ready`: readiness and row count
+- `GET /meta`: snapshot timestamp and freshness
 - `GET /value/{ticker}?fmt=json|arrow`
 - `GET /value/batch?fmt=json|arrow`
+- `POST /admin/reload`: authenticated, atomic snapshot reload
 
-The server binds to `127.0.0.1:8080`. Batch requests are guarded by a single-permit semaphore. The v1 refresh endpoint is intentionally not exposed.
+The reload endpoint requires `API_ADMIN_TOKEN` (minimum 32 characters) and an `x-admin-token` request header. If the replacement snapshot fails validation, the active snapshot is retained. See [deployment and operations](docs/deployment.md).
+
+## Container
+
+```bash
+docker compose build
+API_ADMIN_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" docker compose up -d
+curl http://localhost:8080/ready
+```
+
+Mount the data directory read-only. The image runs as a non-root user. See [deployment and operations](docs/deployment.md) for production requirements.
 
 ## Data ingestion
 
@@ -44,7 +59,7 @@ Install `ingestion/requirements.txt`, create a newline-delimited ticker file, th
 python ingestion/fetch.py --tickers tickers.txt --out data/fundamentals.parquet
 ```
 
-The ingestion script is a starter adapter, not an audited financial-data pipeline. yfinance field availability and statement labels vary by market. Configure local risk-free rate, ERP, currency, terminal growth and growth assumptions deliberately; do not treat generic defaults as investment advice. Missing required fields cause the ticker to be dropped and recorded in the manifest.
+The current yfinance adapter is an experimental starter, not a licensed or audited financial-data service. Field availability and statement labels vary by market and issuer. Do not redistribute its output commercially without confirming source terms. The current adapter also uses illustrative defaults for risk-free rate, ERP, tax, growth and terminal growth; configure and validate these by market. Missing fields are recorded in the manifest.
 
 ## Model
 
@@ -55,7 +70,7 @@ Cost of equity uses CAPM; cost of debt is risk-free rate + 2% in v1. The five-ye
 ## Development
 
 ```bash
-cargo fmt --all
+cargo fmt --all -- --check
 cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 pip install maturin pytest
@@ -65,24 +80,20 @@ pytest -q
 
 ## Publishing to PyPI
 
-Releases are automated after a meaningful, versioned product change is merged to `main`.
+A release workflow automatically builds and publishes a new version after a meaningful, versioned product change is merged to `main`, the main CI/performance gate passes, and Vercel reports a successful production deployment.
 
-1. Create the `pypi` GitHub Actions environment.
-2. Create a PyPI API token for the `valuation` project (prefer a project-scoped token). Do not paste the token into source code, commits, issues, or chat.
-3. Add it as the environment secret named exactly `PYPI_TOKEN` under **Settings → Environments → pypi → Environment secrets**.
-4. Keep `Cargo.toml` and `pyproject.toml` on the same higher stable SemVer version for each significant release.
-5. The release workflow waits for main-branch CI/performance gates and a successful Vercel production deployment, then creates the version tag and dispatches the tag-validated PyPI build.
+The workflow requires the `pypi` GitHub Actions environment and its `PYPI_TOKEN` secret. Prefer a project-scoped PyPI token, or migrate to PyPI Trusted Publishing before the first public release. Never commit credentials.
 
-The PyPI workflow builds wheels for supported OS/Python combinations and an sdist, reruns Rust/Python validation, and publishes the artifacts. A failed or missing CI/Vercel result withholds publication. Publishing a version is irreversible on PyPI; increment the version for every subsequent release.
+Both `Cargo.toml` and `pyproject.toml` must use the same higher stable SemVer version. PyPI releases are immutable; increment the version for each release.
 
-**PyPI name check required:** the intended distribution name is `valuation`. Its availability has not been conclusively verified, so the first release must not proceed until the project URL is checked and the name is confirmed available. PyPI project names are globally unique.
+**First publication is not yet verified.** Confirm that the intended PyPI project name `valuation` is available and that the `pypi` environment secret is configured before the first publication attempt.
 
-## Engineering notes
+## Limitations
 
-- The Parquet snapshot is loaded into immutable in-memory rows at startup. This first implementation prioritizes correctness and simple ownership; it does not claim zero-copy mmap.
-- Batch computation currently shares the scalar reference kernel. SIMD specialization and measured 1,000-row p95/RSS gates are follow-up optimization work, not claimed as already achieved.
-- Arrow IPC is emitted as an Arrow stream.
-- The API does not fetch external data on request.
-- Do not expose the unauthenticated API to the public internet; put it behind a trusted network boundary.
+- The API serves a snapshot; it does not fetch market data on request.
+- The current ingestion adapter is not production-grade and no licensed market-data universe is bundled.
+- The service is container-ready but this repository's Vercel project has not yet been validated as a live Rust API deployment.
+- No public API rate limiting or end-user API-key system is included. Put the service behind a trusted gateway before exposing it.
+- DCF output is model output, not investment advice or a guaranteed fair value.
 
 MIT License.

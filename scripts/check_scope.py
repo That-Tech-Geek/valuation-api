@@ -11,6 +11,7 @@ ALLOWED_EXACT = {
     ".github/CODEOWNERS", ".github/dependabot.yml", ".github/pull_request_template.md",
     ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",
     ".github/workflows/auto-merge.yml", ".github/workflows/release-after-merge.yml",
+    ".github/workflows/auto-review.yml",
 }
 ALLOWED_PREFIXES = (
     "src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/",

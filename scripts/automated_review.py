@@ -80,7 +80,7 @@ def review(diff: str) -> tuple[list[str], list[str]]:
     )
     checks_out_pr_head = any(
         re.search(
-            r"^\\s*ref:\\s*.*(?:github\\.event\\.pull_request\\.head\\.sha|refs/pull/.*/merge)",
+            r"^\s*ref:\s*.*(?:github\.event\.pull_request\.head\.sha|refs/pull/.*/merge)",
             line,
         )
         for line in added_workflow_lines

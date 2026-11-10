@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Determine whether a PR is an in-scope, versioned product release.
-
-This script only reads GitHub metadata and manifest files. It does not merge,
-create tags, deploy, or publish anything.
-"""
+"""Determine whether a PR is an in-scope, versioned product release."""
 from __future__ import annotations
 
 import base64
 import json
 import os
+import re
 import sys
 import tomllib
 import urllib.error
@@ -22,19 +19,16 @@ ALLOWED_EXACT = {
     ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",
     ".github/workflows/auto-merge.yml", ".github/workflows/release-after-merge.yml",
 }
-ALLOWED_PREFIXES = (
-    "src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/",
-)
+ALLOWED_PREFIXES = ("src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/")
 SIGNIFICANT_PREFIXES = ("src/", "python/", "ingestion/")
 SIGNIFICANT_EXACT = {"Cargo.toml", "Cargo.lock", "pyproject.toml"}
 
 
 def api(path: str):
-    token = os.environ["GH_TOKEN"]
     request = urllib.request.Request(
         "https://api.github.com" + path,
         headers={
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
@@ -59,9 +53,16 @@ def version(data: bytes | None, section: str) -> str | None:
     if data is None:
         return None
     document = tomllib.loads(data.decode("utf-8"))
-    if section == "cargo":
-        return document["package"]["version"]
-    return document["project"]["version"]
+    return document["package"]["version"] if section == "cargo" else document["project"]["version"]
+
+
+def semver(value: str | None) -> tuple[int, int, int] | None:
+    if value is None:
+        return None
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", value)
+    if not match:
+        raise ValueError(f"release version must be stable SemVer x.y.z, got {value!r}")
+    return tuple(int(part) for part in match.groups())
 
 
 def main() -> int:
@@ -71,8 +72,7 @@ def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     pr_number = int(sys.argv[1])
     pr = api(f"/repos/{repo}/pulls/{pr_number}")
-    base = pr["base"]["sha"]
-    head = pr["head"]["sha"]
+    base, head = pr["base"]["sha"], pr["head"]["sha"]
     if pr["base"]["ref"] != "main":
         print("HOLD: only PRs targeting main are eligible.")
         return 1
@@ -86,10 +86,7 @@ def main() -> int:
             break
         page += 1
 
-    outside = [
-        path for path in files
-        if path not in ALLOWED_EXACT and not path.startswith(ALLOWED_PREFIXES)
-    ]
+    outside = [path for path in files if path not in ALLOWED_EXACT and not path.startswith(ALLOWED_PREFIXES)]
     if outside:
         print("HOLD: out-of-scope files: " + ", ".join(outside))
         return 1
@@ -104,14 +101,24 @@ def main() -> int:
 
     cargo_base = version(file_at(repo, "Cargo.toml", base), "cargo")
     cargo_head = version(file_at(repo, "Cargo.toml", head), "cargo")
-    py_base = version(file_at(repo, "pyproject.toml", base), "python")
-    py_head = version(file_at(repo, "pyproject.toml", head), "python")
+    py_base_data = file_at(repo, "pyproject.toml", base)
+    py_head_data = file_at(repo, "pyproject.toml", head)
+    py_base = version(py_base_data, "python")
+    py_head = version(py_head_data, "python")
 
+    if py_head_data is None or tomllib.loads(py_head_data.decode("utf-8"))["project"]["name"] != "valuation":
+        print("HOLD: PyPI distribution name must remain exactly 'valuation'.")
+        return 1
     if not cargo_head or not py_head or cargo_head != py_head:
         print(f"HOLD: Cargo/Python versions must both exist and match (Cargo={cargo_head}, Python={py_head}).")
         return 1
-    if cargo_head == cargo_base or py_head == py_base:
-        print(f"HOLD: significant code changes require a coordinated version bump (current {cargo_head}).")
+    current = semver(cargo_head)
+    previous_cargo, previous_python = semver(cargo_base), semver(py_base)
+    if previous_cargo is not None and current <= previous_cargo:
+        print(f"HOLD: release version must increase from Cargo {cargo_base} to {cargo_head}.")
+        return 1
+    if previous_python is not None and current <= previous_python:
+        print(f"HOLD: release version must increase from Python {py_base} to {py_head}.")
         return 1
 
     print(json.dumps({

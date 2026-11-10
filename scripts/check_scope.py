@@ -12,7 +12,6 @@ ALLOWED_EXACT = {
     ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",
     ".github/workflows/auto-merge.yml", ".github/workflows/release-after-merge.yml",
     ".github/workflows/auto-review.yml",
-    ".github/workflows/security-audit.yml", ".github/workflows/auto-merge.yml",
 }
 ALLOWED_PREFIXES = (
     "src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/",

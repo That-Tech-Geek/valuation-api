@@ -57,7 +57,13 @@ def main():
         ticker=ticker.strip()
         if not ticker or ticker.startswith("#"): continue
         try:
-            row=fetch(ticker,defaults)
+            for attempt in range(2):
+                try:
+                    row=fetch(ticker,defaults)
+                    break
+                except yf.exceptions.YFRateLimitError:
+                    if attempt == 1: raise
+                    time.sleep(60)
             if not all(pd.notna(row[c]) for c in COLUMNS) or row["shares_outstanding"] <= 0 or row["price"] <= 0:
                 raise ValueError("null or invalid required value")
             rows.append(row)

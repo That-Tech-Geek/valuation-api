@@ -1,4 +1,4 @@
-use axum::{extract::{Path, Query, State}, http::{header, StatusCode}, response::{IntoResponse, Response}, routing::get, Json, Router};
+use axum::{extract::{Path, Query, State}, http::{header, StatusCode}, response::{IntoResponse, Response}, routing::{get, post}, Json, Router};
 use arrow::{array::{ArrayRef, Float64Array, StringArray}, datatypes::{DataType, Field, Schema}, record_batch::RecordBatch, ipc::writer::StreamWriter};
 use serde::Deserialize;
 use std::{path::PathBuf, sync::Arc};
@@ -36,6 +36,9 @@ async fn batch(Query(q):Query<Format>, State(s):State<AppState>) -> Response {
     if q.fmt.as_deref() == Some("arrow") { arrow_response(results) }
     else { Json(serde_json::json!({"results":results})).into_response() }
 }
+async fn refresh() -> Response {
+    err(StatusCode::NOT_IMPLEMENTED, "NOT_IMPLEMENTED", "refresh is not available in v1; restart after the snapshot is replaced")
+}
 fn arrow_response(rows: Vec<Valuation>) -> Response {
     let schema = Arc::new(Schema::new(vec![
         Field::new("ticker",DataType::Utf8,false), Field::new("fair_value_per_share",DataType::Float64,false),
@@ -61,7 +64,7 @@ async fn main() {
     let store = Store::load(&path).unwrap_or_else(|e| { eprintln!("DATA_UNAVAILABLE: {e}"); std::process::exit(1); });
     let state = AppState { store:Arc::new(store), batch_gate:Arc::new(Semaphore::new(1)) };
     let app = Router::new().route("/health",get(health)).route("/value/{ticker}",get(single))
-        .route("/value/batch",get(batch)).with_state(state);
+        .route("/value/batch",get(batch)).route("/refresh",post(refresh)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await.expect("bind 127.0.0.1:8080");
     axum::serve(listener,app).await.expect("server");
 }

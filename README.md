@@ -65,21 +65,22 @@ pytest -q
 
 ## Publishing to PyPI
 
-Releases are tag-driven. The `Publish to PyPI` GitHub Actions workflow builds platform wheels and publishes them with PyPI Trusted Publishing (OIDC); no long-lived PyPI API token is stored in GitHub.
+Releases are tag-driven. The `Publish to PyPI` GitHub Actions workflow builds platform wheels and publishes them using a PyPI API token stored as a GitHub Actions secret.
 
 **PyPI name check required:** the intended distribution name is `valuation`. Its availability has not been conclusively verified, so do not create a release tag until the project URL is checked and the name is confirmed available. PyPI project names are globally unique.
 
 1. Create the `pypi` environment in the GitHub repository settings.
-2. On PyPI, add a **pending trusted publisher** for owner `That-Tech-Geek`, repository `valuation-api`, workflow filename `publish-pypi.yml`, and environment `pypi`. The project name must be `valuation`.
-3. Ensure the version in `pyproject.toml` and `Cargo.toml` is the release version.
-4. After CI is green and the changes are merged to the release branch, create and push a matching tag, for example:
+2. Create a PyPI API token for the `valuation` project (prefer a project-scoped token). Do not paste the token into source code, commits, issues, or chat.
+3. Add the token as an environment secret named exactly `PYPI_TOKEN` under the repository's `pypi` environment: **Settings → Environments → pypi → Environment secrets**.
+4. Ensure the version in `pyproject.toml` and `Cargo.toml` is the release version.
+5. After CI is green and the changes are merged to the release branch, create and push a matching tag, for example:
 
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-The workflow verifies that the tag version matches both package manifests, builds wheels for supported OS/Python combinations, and publishes the artifacts. Publishing is irreversible on PyPI for a given version: increment the version for every subsequent release. Do not create a release tag until the package has been tested and the PyPI trusted publisher is configured.
+The workflow verifies that the tag version matches both package manifests, builds wheels for supported OS/Python combinations, and publishes the artifacts. Publishing is irreversible on PyPI for a given version: increment the version for every subsequent release. Do not create a release tag until the package has been tested, the `PYPI_TOKEN` secret is configured, and the project name is confirmed available.
 
 ## Engineering notes
 

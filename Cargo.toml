@@ -26,7 +26,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync"] }
-pyo3 = { version = "0.23", features = ["extension-module"], optional = true }\nsubtle = "2"
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
+subtle = "2"
 
 [dev-dependencies]
 tempfile = "3"

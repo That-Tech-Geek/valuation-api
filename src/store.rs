@@ -94,8 +94,8 @@ impl Store {
                 let date = chrono::NaiveDate::from_num_days_from_ce_opt(dates.value(i) + 719163)
                     .ok_or_else(|| LoadError::Row("invalid date".into()))?;
                 let getf = |name: &str| -> Result<f64, LoadError> {
-                    let value = f(floats(name)?)
-                        .ok_or_else(|| LoadError::Row(format!("{name} null")))?;
+                    let value =
+                        f(floats(name)?).ok_or_else(|| LoadError::Row(format!("{name} null")))?;
                     if !value.is_finite() {
                         return Err(LoadError::Row(format!("{name} non-finite")));
                     }

@@ -29,7 +29,7 @@ jobs:
             echo "Refusing to publish: tagged commit is not reachable from main."
             exit 1
           }
-      - name: Check tag and package versions
+      - name: Check tag, package name and versions
         shell: bash
         run: |
           set -euo pipefail
@@ -42,6 +42,10 @@ jobs:
           expected = os.environ["TAG_VERSION"]
           pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
           cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
+          if pyproject["project"]["name"] != "valuation":
+              raise SystemExit(
+                  f'Expected PyPI distribution name "valuation", got {pyproject["project"]["name"]!r}'
+              )
           versions = {
               "pyproject.toml": pyproject["project"]["version"],
               "Cargo.toml": cargo["package"]["version"],
@@ -49,7 +53,7 @@ jobs:
           mismatches = {name: value for name, value in versions.items() if value != expected}
           if mismatches:
               raise SystemExit(f"Tag v{expected} does not match package versions: {mismatches}")
-          print(f"Release version validated: {expected}")
+          print(f"Release validated: valuation {expected}")
           PY
       - name: Rust tests
         run: cargo test --all-targets
@@ -121,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/valuation-api
+      url: https://pypi.org/p/valuation
     permissions:
       id-token: write
     steps:

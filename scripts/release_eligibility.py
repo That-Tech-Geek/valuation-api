@@ -21,7 +21,6 @@ ALLOWED_EXACT = {
 }
 ALLOWED_PREFIXES = ("src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/")
 SIGNIFICANT_PREFIXES = ("src/", "python/", "ingestion/")
-SIGNIFICANT_EXACT = {"Cargo.toml", "Cargo.lock", "pyproject.toml"}
 
 
 def api(path: str):
@@ -100,10 +99,7 @@ def main() -> int:
         print("HOLD: out-of-scope files: " + ", ".join(outside))
         return 1
 
-    significant = [
-        path for path in files
-        if path in SIGNIFICANT_EXACT or path.startswith(SIGNIFICANT_PREFIXES)
-    ]
+    significant = [path for path in files if path.startswith(SIGNIFICANT_PREFIXES)]
     if not significant:
         print("HOLD: no meaningful engine, SDK, ingestion, or package change.")
         return 1

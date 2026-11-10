@@ -1,0 +1,39 @@
+[package]
+name = "valuation-api"
+version = "0.1.0"
+edition = "2021"
+description = "A fast FCFF DCF valuation engine, HTTP API, and Python bindings"
+license = "MIT"
+
+[lib]
+name = "valuation_api"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "valuation-api"
+path = "src/main.rs"
+
+[features]
+default = []
+python = ["dep:pyo3"]
+
+[dependencies]
+arrow = { version = "55", features = ["ipc"] }
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+parquet = { version = "55", features = ["arrow"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

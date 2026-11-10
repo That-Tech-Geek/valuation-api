@@ -188,7 +188,7 @@ async fn reload(headers: HeaderMap, State(state): State<SharedState>) -> Respons
         .get("x-admin-token")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    let authorized = expected.as_bytes().len() == supplied.len()
+    let authorized = expected.len() == supplied.len()
         && expected.as_bytes().ct_eq(supplied.as_bytes()).unwrap_u8() == 1;
     if !authorized {
         return err(

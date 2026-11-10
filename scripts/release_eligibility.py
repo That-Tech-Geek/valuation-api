@@ -100,7 +100,11 @@ def main() -> int:
         print("HOLD: out-of-scope files: " + ", ".join(outside))
         return 1
 
+    # Dependency/security upgrades in Cargo.toml are release-worthy when the
+    # package versions are bumped in lockstep with pyproject.toml.
     significant = [path for path in files if path.startswith(SIGNIFICANT_PREFIXES)]
+    if "Cargo.toml" in files:
+        significant.append("Cargo.toml")
     if not significant:
         # Maintenance PRs can merge after all gates but never trigger a PyPI release.
         if merge_mode or merged_mode:

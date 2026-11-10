@@ -31,7 +31,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          python scripts/release_eligibility.py "$PR_NUMBER"
+          python scripts/release_eligibility.py "$PR_NUMBER" --merged
           VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 

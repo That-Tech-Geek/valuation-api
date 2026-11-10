@@ -66,13 +66,22 @@ def semver(value: str | None) -> tuple[int, int, int] | None:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: release_eligibility.py PR_NUMBER", file=sys.stderr)
+    if len(sys.argv) not in (2, 3):
+        print("usage: release_eligibility.py PR_NUMBER [--merged]", file=sys.stderr)
         return 2
     repo = os.environ["GITHUB_REPOSITORY"]
     pr_number = int(sys.argv[1])
+    merged_mode = len(sys.argv) == 3 and sys.argv[2] == "--merged"
     pr = api(f"/repos/{repo}/pulls/{pr_number}")
-    base, head = pr["base"]["sha"], pr["head"]["sha"]
+    if merged_mode:
+        merge_sha = pr.get("merge_commit_sha")
+        if not merge_sha:
+            print("HOLD: merged PR has no merge commit SHA.")
+            return 1
+        merge_commit = api(f"/repos/{repo}/commits/{merge_sha}")
+        base, head = merge_commit["parents"][0]["sha"], merge_sha
+    else:
+        base, head = pr["base"]["sha"], pr["head"]["sha"]
     if pr["base"]["ref"] != "main":
         print("HOLD: only PRs targeting main are eligible.")
         return 1

@@ -6,10 +6,12 @@ on:
   pull_request_review:
     types: [submitted]
 
+# Trusted base-branch workflow only. Never checks out or runs PR code.
 permissions:
   contents: read
   pull-requests: write
   checks: read
+  statuses: read
 
 concurrency:
   group: eligible-pr-\${{ github.event.pull_request.number }}
@@ -29,18 +31,19 @@ jobs:
           ref: main
           persist-credentials: false
 
-      - name: Check maintainer approval
+      - name: Check maintainer approval on exact head commit
         id: approval
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: \${{ github.event.pull_request.number }}
           REPOSITORY: \${{ github.repository }}
+          HEAD_SHA: \${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           state="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate --jq '[.[] | select(.user.login == "That-Tech-Geek" and .commit_id == env.HEAD_SHA)][-1].state // "NONE"')"
-          echo "Latest maintainer review: $state"
+          echo "Latest maintainer review for this head: $state"
           if [ "$state" != "APPROVED" ]; then
-            echo "PR held: waiting for an approval from @That-Tech-Geek."
+            echo "PR held: waiting for @That-Tech-Geek to approve this exact commit."
             echo "approved=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -62,12 +65,47 @@ jobs:
           fi
           echo "eligible=true" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for all PR checks
+      - name: Wait for CI tests and performance benchmarks
         if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: \${{ github.event.pull_request.number }}
-        run: gh pr checks "$PR_NUMBER" --watch --fail-fast
+          REPOSITORY: \${{ github.repository }}
+          HEAD_SHA: \${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            result="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '[.check_runs[] | select(.name == "Quality, scope and performance gates")] | sort_by(.started_at) | last | if . == null then "missing" elif .status != "completed" then "pending" else .conclusion end')"
+            echo "CI + benchmark result: $result"
+            if [ "$result" = "success" ]; then exit 0; fi
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ] || [ "$result" = "timed_out" ]; then
+              echo "CI or benchmark gate failed; PR remains open."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for CI; PR remains open."
+          exit 1
+
+      - name: Wait for Vercel preview deployment
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: \${{ github.repository }}
+          HEAD_SHA: \${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            state="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/status" --jq '[.statuses[] | select(.context == "Vercel")] | sort_by(.created_at) | last | .state // "missing"')"
+            echo "Vercel preview status: $state"
+            if [ "$state" = "success" ]; then exit 0; fi
+            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+              echo "Vercel preview failed; PR remains open."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Vercel preview did not report success; PR remains open."
+          exit 1
 
       - name: Enable squash auto-merge
         if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'

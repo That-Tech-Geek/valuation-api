@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
+import resource
 from pathlib import Path
 import statistics
 import subprocess
@@ -104,7 +104,12 @@ def main() -> None:
 
         stop.set()
         sampler.join(timeout=1)
-        peak_rss = max(samples, default=math.inf)
+        proc.terminate()
+        proc.wait(timeout=5)
+        # ru_maxrss is reported in KiB on Linux and captures short-lived peaks
+        # that periodic /proc sampling could miss.
+        child_peak_mib = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1024.0
+        peak_rss = max(max(samples, default=0.0), child_peak_mib)
         result = {
             "rows": args.rows,
             "startup_ms": round(startup_ms, 3),

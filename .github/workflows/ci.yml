@@ -49,6 +49,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python scripts/check_scope.py "$BASE_SHA" "$HEAD_SHA"
 
+      - name: Generate deterministic Rust test fixture
+        run: python scripts/create_fixture.py
+
       - name: Rust formatting
         run: cargo fmt --all -- --check
 

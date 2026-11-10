@@ -45,9 +45,9 @@ impl Store {
             return Err(LoadError::Manifest);
         }
         let file = File::open(path)?;
-        let mut reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
+        let reader = ParquetRecordBatchReaderBuilder::try_new(file)?.build()?;
         let mut rows = Vec::with_capacity(manifest.row_count);
-        while let Some(batch) = reader.next() {
+        for batch in reader {
             let batch = batch?;
             let col = |name: &str| {
                 batch

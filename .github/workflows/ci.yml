@@ -67,6 +67,9 @@ jobs:
       - name: Build release binary
         run: cargo build --release
 
+      - name: Build runtime container image
+        run: docker build --tag valuation-api:ci .
+
       - name: Enforce binary size budget
         run: |
           size="$(stat -c%s target/release/valuation-api)"

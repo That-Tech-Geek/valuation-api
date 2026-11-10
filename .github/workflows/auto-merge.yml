@@ -64,8 +64,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          if ! python scripts/release_eligibility.py "$PR_NUMBER"; then
-            echo "PR held. It is out of scope, non-significant, or missing a coordinated version bump."
+          if ! python scripts/release_eligibility.py "$PR_NUMBER" --merge; then
+            echo "PR held. It is out of scope or a significant product change is missing a coordinated version bump."
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

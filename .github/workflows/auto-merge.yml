@@ -37,7 +37,7 @@ jobs:
           REPOSITORY: \${{ github.repository }}
         run: |
           set -euo pipefail
-          state="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate --jq '[.[] | select(.user.login == "That-Tech-Geek")][-1].state // "NONE"')"
+          state="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate --jq '[.[] | select(.user.login == "That-Tech-Geek" and .commit_id == env.HEAD_SHA)][-1].state // "NONE"')"
           echo "Latest maintainer review: $state"
           if [ "$state" != "APPROVED" ]; then
             echo "PR held: waiting for an approval from @That-Tech-Geek."

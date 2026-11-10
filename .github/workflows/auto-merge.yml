@@ -8,7 +8,7 @@ on:
 
 # Trusted base-branch workflow only. Never checks out or runs PR code.
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   checks: read
   statuses: read
@@ -112,4 +112,4 @@ jobs:
         env:
           GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: \${{ github.event.pull_request.number }}
-        run: gh pr merge "$PR_NUMBER" --auto --squash
+        run: gh pr merge "$PR_NUMBER" --squash

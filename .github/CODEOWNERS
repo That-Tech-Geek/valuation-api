@@ -1,0 +1,3 @@
+# Maintainer review ownership. Enforce this with a branch ruleset requiring
+# CODEOWNERS review; this file alone does not block merges.
+* @That-Tech-Geek

@@ -9,7 +9,7 @@ ALLOWED_EXACT = {
     "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md", ".gitignore",
     "Cargo.toml", "Cargo.lock", "pyproject.toml",
     ".github/CODEOWNERS", ".github/dependabot.yml", ".github/pull_request_template.md",
-    ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",
+    ".github/workflows/ci.yml", ".github/workflows/publish-pypi.yml",\n    ".github/workflows/auto-merge.yml", ".github/workflows/release-after-merge.yml",\n    "scripts/release_eligibility.py",
 }
 ALLOWED_PREFIXES = (
     "src/", "python/", "ingestion/", "tests/", "scripts/", "benches/", "docs/",

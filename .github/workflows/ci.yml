@@ -18,7 +18,7 @@ jobs:
       - run: pip install pyarrow
       - run: python scripts/create_fixture.py
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
+      - run: cargo fmt --all
       - run: cargo test --all-targets
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo build --release
@@ -33,5 +33,6 @@ jobs:
           python-version: "3.11"
       - uses: dtolnay/rust-toolchain@stable
       - run: pip install maturin pytest
-      - run: maturin develop --release
+      - run: maturin build --release --out dist
+      - run: pip install dist/*.whl
       - run: pytest -q

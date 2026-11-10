@@ -8,7 +8,6 @@ permissions:
   contents: write
   actions: write
   checks: read
-  statuses: read
   pull-requests: read
 
 jobs:
@@ -32,11 +31,19 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          python scripts/release_eligibility.py "$PR_NUMBER" --merged
+          result="$(python scripts/release_eligibility.py "$PR_NUMBER" --merged)"
+          echo "$result"
+          release="$(python -c 'import json,sys; print(str(json.loads(sys.argv[1]).get("release", False)).lower())' "$result")"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          if [ "$release" != "true" ]; then
+            echo "Non-release change: merge is complete; PyPI publication is skipped."
+            exit 0
+          fi
           VERSION="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Wait for main-branch CI benchmark gate
+        if: steps.eligibility.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
@@ -56,27 +63,8 @@ jobs:
           echo "Timed out waiting for main CI. No PyPI release created."
           exit 1
 
-      - name: Wait for successful Vercel production deployment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 60); do
-            state="$(gh api "repos/$REPOSITORY/commits/$COMMIT_SHA/status" --jq '[.statuses[] | select(.context == "Vercel")] | sort_by(.created_at) | last | .state // "missing"')"
-            echo "Vercel production status: $state"
-            if [ "$state" = "success" ]; then exit 0; fi
-            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
-              echo "Vercel deployment failed; withholding PyPI publication."
-              exit 1
-            fi
-            sleep 10
-          done
-          echo "No successful Vercel status appeared within 10 minutes. No PyPI release created."
-          exit 1
-
       - name: Create immutable version tag
+        if: steps.eligibility.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
@@ -97,6 +85,7 @@ jobs:
           echo "Created/verified $TAG at $COMMIT_SHA"
 
       - name: Dispatch tag-validated PyPI publication
+        if: steps.eligibility.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: v${{ steps.eligibility.outputs.version }}

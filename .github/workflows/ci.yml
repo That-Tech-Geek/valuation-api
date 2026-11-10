@@ -1,58 +1,109 @@
 name: CI
 
 on:
-  push:
-    branches: [main, "feat/**"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
 
-# Forked pull requests execute untrusted code. They receive no write permissions
-# and this workflow must never use repository or environment secrets.
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  rust:
-    name: Rust checks
+  quality-and-benchmarks:
+    name: Quality, scope and performance gates
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: python -m pip install pyarrow
-      - run: python scripts/create_fixture.py
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
-      - run: cargo test --all-targets
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo build --release
-      - name: Binary size
-        run: test "$(stat -c%s target/release/valuation-api)" -lt 15728640
 
-  python:
-    name: Python package checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
+      - name: Install Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - uses: dtolnay/rust-toolchain@stable
-      - run: python -m pip install --upgrade pip maturin pytest
-      - run: maturin build --release --out dist
-      - run: python -m pip install dist/*.whl
-      - run: python -m pytest -q
+          cache: pip
+
+      - name: Install test and fixture dependencies
+        run: python -m pip install --upgrade pip pyarrow maturin pytest
+
+      - name: Verify PR scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/check_scope.py "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Rust tests
+        run: cargo test --all-targets
+
+      - name: Rust lint
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Enforce binary size budget
+        run: |
+          size="$(stat -c%s target/release/valuation-api)"
+          echo "Release binary: $size bytes"
+          test "$size" -lt 15728640
+
+      - name: Build and test Python wheel
+        run: |
+          maturin build --release --out dist
+          python -m pip install --force-reinstall dist/*.whl
+          python -m pytest -q
+
+      - name: Generate 1,000-company benchmark snapshot
+        run: python scripts/create_fixture.py --rows 1000 --out data/benchmark/fundamentals.parquet
+
+      - name: Run live API latency and RAM benchmark
+        run: |
+          set -o pipefail
+          python scripts/benchmark_api.py \
+            --binary target/release/valuation-api \
+            --data data/benchmark/fundamentals.parquet \
+            --rows 1000 \
+            --single-iterations 100 \
+            --batch-iterations 30 \
+            --max-startup-ms 2000 \
+            --max-single-p95-ms 5 \
+            --max-batch-p95-ms 200 \
+            --max-rss-mib 250 | tee benchmark-results.json
+
+      - name: Publish benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: valuation-benchmark-${{ github.sha }}
+          path: benchmark-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Add benchmark summary
+        if: always()
+        run: |
+          if [ -f benchmark-results.json ]; then
+            echo '### 1,000-company benchmark' >> "$GITHUB_STEP_SUMMARY"
+            echo 'JSON results attached as workflow artifact.' >> "$GITHUB_STEP_SUMMARY"
+            cat benchmark-results.json >> "$GITHUB_STEP_SUMMARY"
+          fi

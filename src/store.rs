@@ -37,10 +37,9 @@ pub struct Store {
 impl Store {
     pub fn load(path: &Path) -> Result<Self, LoadError> {
         let manifest_path = path.with_file_name("fundamentals.manifest.json");
-        let manifest: Manifest = serde_json::from_reader(
-            File::open(manifest_path).map_err(|_| LoadError::Manifest)?,
-        )
-        .map_err(|_| LoadError::Manifest)?;
+        let manifest: Manifest =
+            serde_json::from_reader(File::open(manifest_path).map_err(|_| LoadError::Manifest)?)
+                .map_err(|_| LoadError::Manifest)?;
         if manifest.row_count == 0 {
             return Err(LoadError::Manifest);
         }
@@ -89,13 +88,13 @@ impl Store {
                         Some(a.value(i))
                     }
                 };
-                let ticker = s(strings("ticker")?)
-                    .ok_or_else(|| LoadError::Row("ticker null".into()))?;
+                let ticker =
+                    s(strings("ticker")?).ok_or_else(|| LoadError::Row("ticker null".into()))?;
                 let date = chrono::NaiveDate::from_num_days_from_ce_opt(dates.value(i) + 719163)
                     .ok_or_else(|| LoadError::Row("invalid date".into()))?;
                 let getf = |name: &str| -> Result<f64, LoadError> {
-                    let v = f(floats(name)?)
-                        .ok_or_else(|| LoadError::Row(format!("{name} null")))?;
+                    let v =
+                        f(floats(name)?).ok_or_else(|| LoadError::Row(format!("{name} null")))?;
                     if !v.is_finite() {
                         return Err(LoadError::Row(format!("{name} non-finite")));
                     }

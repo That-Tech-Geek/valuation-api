@@ -1,0 +1,102 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check tag and package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="$TAG_VERSION" python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          expected = os.environ["TAG_VERSION"]
+          pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text())
+          versions = {
+              "pyproject.toml": pyproject["project"]["version"],
+              "Cargo.toml": cargo["package"]["version"],
+          }
+          mismatches = {name: value for name, value in versions.items() if value != expected}
+          if mismatches:
+              raise SystemExit(f"Tag v{expected} does not match package versions: {mismatches}")
+          print(f"Release version validated: {expected}")
+          PY
+      - name: Rust tests
+        run: cargo test --all-targets
+      - name: Rust lint
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Python packaging tests
+        run: |
+          python -m pip install --upgrade pip maturin pytest
+          maturin build --release --out dist
+          python -m pip install dist/*.whl
+          python -m pytest -q
+
+  build-wheels:
+    name: Build ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-13, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install build tools
+        run: python -m pip install --upgrade pip maturin
+      - name: Build wheel
+        run: maturin build --release --out dist --interpreter python
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish distribution to PyPI
+    needs: [validate, build-wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/valuation-api
+    permissions:
+      id-token: write
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1

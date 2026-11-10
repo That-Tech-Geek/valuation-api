@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing version tag to build and publish (for example v0.1.1)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,9 +18,13 @@ jobs:
   validate:
     name: Validate release
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
@@ -25,7 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main --depth=1
-          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+          TAG_COMMIT="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor "$TAG_COMMIT" FETCH_HEAD || {
             echo "Refusing to publish: tagged commit is not reachable from main."
             exit 1
           }
@@ -33,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${RELEASE_TAG#v}"
           TAG_VERSION="$TAG_VERSION" python - <<'PY'
           import os
           import pathlib
@@ -78,6 +89,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
@@ -102,6 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ inputs.release_tag || github.ref_name }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5

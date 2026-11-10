@@ -18,15 +18,15 @@ default = []
 python = ["dep:pyo3"]
 
 [dependencies]
-arrow = { version = "55", features = ["ipc"] }
+arrow = { version = "60", features = ["ipc"] }
 axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
-parquet = { version = "55", features = ["arrow"] }
+parquet = { version = "60", features = ["arrow"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
-pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -126,8 +126,6 @@ jobs:
     environment:
       name: pypi
       url: https://pypi.org/p/valuation
-    permissions:
-      id-token: write
     steps:
       - name: Download all wheel and source artifacts
         uses: actions/download-artifact@v4
@@ -137,3 +135,5 @@ jobs:
           merge-multiple: true
       - name: Publish package
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}

@@ -19,4 +19,4 @@ def compute_batch(rows: Iterable[Mapping[str, float]]) -> list[dict]:
     return results
 
 __all__ = ["compute_dcf", "compute_batch"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"

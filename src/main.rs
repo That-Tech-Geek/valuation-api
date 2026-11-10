@@ -101,7 +101,11 @@ async fn metadata(State(state): State<SharedState>) -> Json<serde_json::Value> {
     let generated_at = store.manifest.generated_at.clone();
     let age_seconds = chrono::DateTime::parse_from_rfc3339(&generated_at)
         .ok()
-        .map(|value| (chrono::Utc::now() - value.with_timezone(&chrono::Utc)).num_seconds().max(0));
+        .map(|value| {
+            (chrono::Utc::now() - value.with_timezone(&chrono::Utc))
+                .num_seconds()
+                .max(0)
+        });
     Json(serde_json::json!({
         "engine": "valuation-api",
         "data": {
@@ -292,7 +296,9 @@ async fn main() {
         eprintln!("DATA_UNAVAILABLE: {error}");
         std::process::exit(1);
     });
-    let admin_token = std::env::var("API_ADMIN_TOKEN").ok().filter(|value| !value.is_empty());
+    let admin_token = std::env::var("API_ADMIN_TOKEN")
+        .ok()
+        .filter(|value| !value.is_empty());
     if admin_token.as_ref().is_some_and(|value| value.len() < 32) {
         eprintln!("CONFIGURATION_ERROR: API_ADMIN_TOKEN must contain at least 32 characters");
         std::process::exit(1);

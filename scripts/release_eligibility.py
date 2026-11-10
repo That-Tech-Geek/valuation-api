@@ -66,11 +66,12 @@ def semver(value: str | None) -> tuple[int, int, int] | None:
 
 def main() -> int:
     if len(sys.argv) not in (2, 3):
-        print("usage: release_eligibility.py PR_NUMBER [--merged]", file=sys.stderr)
+        print("usage: release_eligibility.py PR_NUMBER [--merge|--merged]", file=sys.stderr)
         return 2
     repo = os.environ["GITHUB_REPOSITORY"]
     pr_number = int(sys.argv[1])
     merged_mode = len(sys.argv) == 3 and sys.argv[2] == "--merged"
+    merge_mode = len(sys.argv) == 3 and sys.argv[2] == "--merge"
     pr = api(f"/repos/{repo}/pulls/{pr_number}")
     if merged_mode:
         merge_sha = pr.get("merge_commit_sha")
@@ -101,7 +102,16 @@ def main() -> int:
 
     significant = [path for path in files if path.startswith(SIGNIFICANT_PREFIXES)]
     if not significant:
-        print("HOLD: no meaningful engine, SDK, ingestion, or package change.")
+        # Maintenance PRs can merge after all gates but never trigger a PyPI release.
+        if merge_mode or merged_mode:
+            print(json.dumps({
+                "eligible": True,
+                "release": False,
+                "reason": "No engine, SDK, or ingestion changes.",
+                "changed_files": len(files),
+            }))
+            return 0
+        print("HOLD: no meaningful engine, SDK, or ingestion change.")
         return 1
 
     cargo_base = version(file_at(repo, "Cargo.toml", base), "cargo")
@@ -128,6 +138,7 @@ def main() -> int:
 
     print(json.dumps({
         "eligible": True,
+        "release": True,
         "release_version": cargo_head,
         "significant_files": significant,
         "changed_files": len(files),

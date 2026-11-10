@@ -8,6 +8,7 @@ permissions:
   contents: write
   actions: write
   checks: read
+  statuses: read
   pull-requests: read
 
 jobs:

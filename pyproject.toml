@@ -1,0 +1,23 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "valuation"
+version = "0.1.0"
+description = "Rust-backed FCFF DCF valuation library"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "That-Tech-Geek" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Topic :: Office/Business :: Financial",
+  "Topic :: Scientific/Engineering"
+]
+
+[tool.maturin]
+features = ["python"]
+python-source = "python"
+module-name = "valuation_api._native"

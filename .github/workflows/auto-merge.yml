@@ -1,0 +1,143 @@
+name: Eligible PR auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+# Trusted base-branch workflow only. Never checks out or runs PR code.
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: eligible-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate-and-merge:
+    if: >-
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout trusted main branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check maintainer approval on exact head commit
+        id: approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          if [ "$PR_AUTHOR" = "That-Tech-Geek" ]; then
+            echo "Owner-authored PR: using repository-owner authorization."
+            echo "approved=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          state="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" --paginate --jq '[.[] | select(.user.login == "That-Tech-Geek" and .commit_id == env.HEAD_SHA)][-1].state // "NONE"')"
+          echo "Latest maintainer review for this head: $state"
+          if [ "$state" != "APPROVED" ]; then
+            echo "PR held: waiting for @That-Tech-Geek to approve this exact commit."
+            echo "approved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "approved=true" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce scope and meaningful versioned change
+        id: eligibility
+        if: steps.approval.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if ! python scripts/release_eligibility.py "$PR_NUMBER"; then
+            echo "PR held. It is out of scope, non-significant, or missing a coordinated version bump."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for CI tests and performance benchmarks
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            result="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '[.check_runs[] | select(.name == "Quality, scope and performance gates")] | sort_by(.started_at) | last | if . == null then "missing" elif .status != "completed" then "pending" else .conclusion end')"
+            echo "CI + benchmark result: $result"
+            if [ "$result" = "success" ]; then exit 0; fi
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ] || [ "$result" = "timed_out" ]; then
+              echo "CI or benchmark gate failed; PR remains open."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for CI; PR remains open."
+          exit 1
+
+      - name: Wait for Vercel preview deployment
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            state="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/status" --jq '[.statuses[] | select(.context == "Vercel")] | sort_by(.created_at) | last | .state // "missing"')"
+            echo "Vercel preview status: $state"
+            if [ "$state" = "success" ]; then exit 0; fi
+            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+              echo "Vercel preview failed; PR remains open."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Vercel preview did not report success; PR remains open."
+          exit 1
+
+      - name: Verify every other PR check and status is green
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            checks="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/check-runs" --jq '[.check_runs[] | select((.name | contains("gate-and-merge")) | not)] as $runs | if any($runs[]; .status == "completed" and (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral")) then "failure" elif any($runs[]; .status != "completed") then "pending" else "success" end')"
+            statuses="$(gh api "repos/$REPOSITORY/commits/$HEAD_SHA/status" --jq '.state')"
+            echo "Other checks: $checks; combined commit status: $statuses"
+            if [ "$checks" = "failure" ] || [ "$statuses" = "failure" ] || [ "$statuses" = "error" ]; then
+              echo "Another PR check failed; leaving the PR open."
+              exit 1
+            fi
+            if [ "$checks" = "success" ] && [ "$statuses" = "success" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Other checks did not all complete successfully; leaving the PR open."
+          exit 1
+
+      - name: Enable squash auto-merge
+        if: steps.approval.outputs.approved == 'true' && steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR_NUMBER" --squash

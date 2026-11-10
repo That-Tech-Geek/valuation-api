@@ -66,6 +66,11 @@ jobs:
               raise SystemExit(f"Tag v{expected} does not match package versions: {mismatches}")
           print(f"Release validated: valuation {expected}")
           PY
+      - name: Generate deterministic Rust integration-test fixture
+        run: |
+          python -m pip install pyarrow
+          python scripts/create_fixture.py
+
       - name: Rust tests
         run: cargo test --all-targets
       - name: Rust lint

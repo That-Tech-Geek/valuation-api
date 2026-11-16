@@ -113,4 +113,13 @@ mod tests {
         x.capex = 500.0;
         assert!(compute(&x).flags.contains(Flags::NEGATIVE_FCFF));
     }
+    #[test]
+    fn matches_hand_calculated_reference_snapshot() {
+        let out = compute(&sample());
+        assert!((out.wacc - 0.075).abs() < 1e-12);
+        assert!((out.enterprise_value - 1852.2637224453847).abs() < 1e-9);
+        assert!((out.equity_value - 1772.2637224453847).abs() < 1e-9);
+        assert!((out.fair_value_per_share - 177.22637224453848).abs() < 1e-10);
+    }
+
 }

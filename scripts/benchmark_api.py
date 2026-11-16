@@ -72,18 +72,18 @@ def main() -> None:
         while True:
             if proc.poll() is not None:
                 stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
-                raise RuntimeError(f"API exited before health check: {stderr}")
+                raise RuntimeError(f"API exited before readiness check: {stderr}")
             try:
-                _, health = request(base + "/health")
+                _, readiness = request(base + "/ready")
                 break
             except (URLError, TimeoutError, OSError):
                 if time.perf_counter() >= deadline:
-                    raise RuntimeError("API health check timed out")
+                    raise RuntimeError("API readiness check timed out")
                 time.sleep(0.025)
         startup_ms = (time.perf_counter() - started) * 1000.0
-        health_doc = json.loads(health)
-        if health_doc.get("rows") != args.rows:
-            raise RuntimeError(f"expected {args.rows} loaded rows, got {health_doc.get('rows')}")
+        readiness_doc = json.loads(readiness)
+        if readiness_doc.get("rows") != args.rows:
+            raise RuntimeError(f"expected {args.rows} loaded rows, got {readiness_doc.get('rows')}")
 
         single_url = base + "/value/FIX00000.X"
         batch_url = base + "/value/batch?fmt=json"

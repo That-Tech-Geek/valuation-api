@@ -78,34 +78,7 @@ def change_in_nwc(balance_sheet) -> float:
         ],
     )
 
-    aggregate_cash_key = next(
-        (
-            key
-            for key in (
-                "Cash Cash Equivalents And Short Term Investments",
-                "Cash And Cash Equivalents And Short Term Investments",
-            )
-            if key in balance_sheet.index
-        ),
-        None,
-    )
-    if aggregate_cash_key is not None:
-        cash_and_short_term_investments = _latest_two_values(
-            balance_sheet, "cash and short-term investments", [aggregate_cash_key]
-        )
-    else:
-        cash = _latest_two_values(
-            balance_sheet, "cash and cash equivalents", ["Cash And Cash Equivalents"]
-        )
-        short_term_investments = _latest_two_values(
-            balance_sheet,
-            "short-term investments",
-            ["Other Short Term Investments", "Short Term Investments"],
-        )
-        cash_and_short_term_investments = (
-            cash[0] + short_term_investments[0],
-            cash[1] + short_term_investments[1],
-        )
+    cash_and_short_term_investments = cash_and_short_term_investments(balance_sheet)
 
     current_nwc = (
         current_assets[0]
@@ -123,6 +96,42 @@ def change_in_nwc(balance_sheet) -> float:
     if not math.isfinite(delta):
         raise ValueError("derived change in net working capital is non-finite")
     return delta
+
+
+def cash_and_short_term_investments(balance_sheet) -> tuple[float, float]:
+    """Return latest and prior cash plus short-term investments.
+
+    Prefer the provider's aggregate line. If it is absent or incomplete, derive
+    the total from the two separately reported components; never substitute a
+    stale period or a hard-coded zero.
+    """
+    aggregate_keys = (
+        "Cash Cash Equivalents And Short Term Investments",
+        "Cash And Cash Equivalents And Short Term Investments",
+    )
+    aggregate_key = next((key for key in aggregate_keys if key in balance_sheet.index), None)
+    if aggregate_key is not None:
+        try:
+            return _latest_two_values(
+                balance_sheet, "cash and short-term investments", [aggregate_key]
+            )
+        except ValueError:
+            # Some provider snapshots expose the aggregate row but leave it
+            # blank while reporting cash and investments separately.
+            pass
+
+    cash = _latest_two_values(
+        balance_sheet, "cash and cash equivalents", ["Cash And Cash Equivalents"]
+    )
+    short_term_investments = _latest_two_values(
+        balance_sheet,
+        "short-term investments",
+        ["Other Short Term Investments", "Short Term Investments"],
+    )
+    return (
+        cash[0] + short_term_investments[0],
+        cash[1] + short_term_investments[1],
+    )
 
 
 def fetch(ticker: str, defaults: dict) -> dict:
@@ -150,20 +159,9 @@ def fetch(ticker: str, defaults: dict) -> dict:
     )
 
     debt = first_number(bal, ["Total Debt"])
-    cash = first_number(
-        bal,
-        ["Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"],
-    )
-    if cash is None:
-        cash_equivalents = first_number(bal, ["Cash And Cash Equivalents"])
-        short_term_investments = first_number(
-            bal, ["Other Short Term Investments", "Short Term Investments"]
-        )
-        if cash_equivalents is None or short_term_investments is None:
-            raise ValueError("missing cash or short-term investments; refusing to assume zero")
-        cash = cash_equivalents + short_term_investments
     if debt is None:
         raise ValueError("missing total debt; refusing to assume zero")
+    cash = cash_and_short_term_investments(bal)[0]
 
     change_nwc = change_in_nwc(bal)
     shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")

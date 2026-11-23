@@ -133,6 +133,24 @@ def test_fetch_uses_derived_change_in_nwc_and_requires_real_capex_debt_and_cash(
     assert row["change_nwc"] == pytest.approx(30.0)
     assert row["capex"] == pytest.approx(15.0)
     assert row["total_debt"] == pytest.approx(100.0)
+    assert row["cash"] == pytest.approx(100.0)
+
+    # If Yahoo reports cash and short-term investments separately, the equity
+    # bridge must use their sum rather than cash alone.
+    separate_balance_sheet = balance_sheet.drop(
+        index="Cash Cash Equivalents And Short Term Investments"
+    ).copy()
+    separate_balance_sheet.loc["Other Short Term Investments"] = [80.0, 75.0]
+
+    class SeparateCashTicker(FakeTicker):
+        @property
+        def balance_sheet(self):
+            return separate_balance_sheet
+
+    monkeypatch.setattr(ingestion_module.yf, "Ticker", lambda _: SeparateCashTicker())
+    separate_row = ingestion_module.fetch("TEST", defaults)
+    assert separate_row["cash"] == pytest.approx(100.0)
+    assert separate_row["change_nwc"] == pytest.approx(30.0)
 
     incomplete_financials = financials.drop(index="Capital Expenditure")
     monkeypatch.setattr(

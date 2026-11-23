@@ -78,7 +78,7 @@ def change_in_nwc(balance_sheet) -> float:
         ],
     )
 
-    cash_and_short_term_investments = cash_and_short_term_investments(balance_sheet)
+    cash_and_short_term_investments = _cash_and_short_term_investments(balance_sheet)
 
     current_nwc = (
         current_assets[0]
@@ -98,7 +98,7 @@ def change_in_nwc(balance_sheet) -> float:
     return delta
 
 
-def cash_and_short_term_investments(balance_sheet) -> tuple[float, float]:
+def _cash_and_short_term_investments(balance_sheet) -> tuple[float, float]:
     """Return latest and prior cash plus short-term investments.
 
     Prefer the provider's aggregate line. If it is absent or incomplete, derive
@@ -161,7 +161,7 @@ def fetch(ticker: str, defaults: dict) -> dict:
     debt = first_number(bal, ["Total Debt"])
     if debt is None:
         raise ValueError("missing total debt; refusing to assume zero")
-    cash = cash_and_short_term_investments(bal)[0]
+    cash = _cash_and_short_term_investments(bal)[0]
 
     change_nwc = change_in_nwc(bal)
     shares = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")

@@ -42,8 +42,22 @@ jobs:
       - name: Install test and fixture dependencies
         run: python -m pip install --upgrade pip pyarrow maturin pytest
 
+      - name: Install security audit tools
+        run: |
+          cargo install cargo-audit --locked
+          python -m pip install pip-audit
+
+      - name: Audit Rust dependencies
+        run: cargo audit
+
+      - name: Audit Python ingestion dependencies
+        run: pip-audit -r ingestion/requirements.txt
+
+      - name: Install ingestion dependencies
+        run: python -m pip install -r ingestion/requirements.txt
+
       - name: Compile-check repository scripts
-        run: python -m compileall -q scripts
+        run: python -m compileall -q scripts ingestion tests
 
       - name: Verify PR scope
         if: github.event_name == 'pull_request'
@@ -66,6 +80,7 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release
+
 
       - name: Build runtime container image
         run: docker build --tag valuation-api:ci .
